@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.tree import DecisionTreeRegressor 
+from sklearn.tree import DecisionTreeClassifier 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
@@ -9,22 +9,27 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from feature_importance import FeatureImportance
+from sklearn.metrics import accuracy_score
 
 influenza_file_path = 'Influenza_NY.csv'
-NYC_data = pd.read_csv(influenza_file_path)
+NYC_data = pd.read_csv(influenza_file_path, index_col=[0])
 
-dropped_columns = ['Year', 'Season', 'Week Ending Date', 'County_Served_hospital', 'Service_hospital']
+#Dropping columns with missing values, columns with uninterpretable meanings and columns not useful for predicting future influenza outbreaks (time-related)
+dropped_columns = [#'Year', 'Season',
+                    'Week Ending Date', 'County_Served_hospital', 'Service_hospital']
 dropped_data = NYC_data.dropna().drop(columns=dropped_columns)
+dropped_data = dropped_data[dropped_data.Disease != "INFLUENZA_UNSPECIFIED"]
 
-X = dropped_data#.drop(columns=['Disease'])
+X = dropped_data.drop(columns='Disease')
 y = dropped_data.Disease
 
 trainX, testX, trainy, testy = train_test_split(X, y, test_size=0.8)
 
-cat_columns = ['Region', 'Disease']
+cat_columns = ['Region',
+                'Year', 'Season']
 
 categorical_transformer = Pipeline(steps=[
-    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+    ('onehot', OneHotEncoder())])
 
 encoder= ce.BinaryEncoder(return_df=True)
 hicardinal_transformer = Pipeline(steps=[('binary', encoder)])
@@ -32,8 +37,8 @@ hicardinal_transformer = Pipeline(steps=[('binary', encoder)])
 preprocessor = ColumnTransformer(
     transformers=[
         ('cat', categorical_transformer, cat_columns),
-        ('cat2', hicardinal_transformer, 'County')
-    ])
+        ('cat2', hicardinal_transformer, 'County'), 
+    ], remainder='passthrough')
 
 #Get column names from a ColumnTransformer, with print functions commented out to return only a list
 def get_column_names_from_ColumnTransformer(column_transformer):    
@@ -72,13 +77,19 @@ def get_column_names_from_ColumnTransformer(column_transformer):
             
     return col_name
 
-NYC_model = RandomForestClassifier(n_estimators=100, random_state=0)
+NYC_model = RandomForestClassifier(verbose=1)
 NYC_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', NYC_model)])
 
+#trainX, testX = trainX.drop(columns='Disease'), testX.drop(columns='Disease')
 NYC_pipeline.fit(trainX, trainy)
+NYC_pipeline.feature_names_in_
+
+predictions = NYC_pipeline.predict(testX)
+print("Accuracy: ", accuracy_score(testy, predictions))
 
 
 new_column_names = (get_column_names_from_ColumnTransformer(preprocessor))
+
 
 
 
@@ -87,7 +98,6 @@ new_column_names = (get_column_names_from_ColumnTransformer(preprocessor))
 # nyc_predictions = nyc_model.predict(testX)
 # print(mean_absolute_error(testy, nyc_predictions))
 
-print('test')
 
 # Empty columns: ['Beds_adult_facility_care', 'Beds_hospital', 'County_Served_hospital',
 #        'Service_hospital', 'Discharges_Other_Hospital_intervention',
