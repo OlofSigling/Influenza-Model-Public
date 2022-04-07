@@ -10,7 +10,9 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from feature_importance import FeatureImportance
 from sklearn.metrics import accuracy_score
-
+from sklearn.model_selection import cross_val_score
+from xgboost import XGBClassifier
+from xgboost import cv
 influenza_file_path = 'Influenza_NY.csv'
 NYC_data = pd.read_csv(influenza_file_path, index_col=[0])
 
@@ -18,6 +20,7 @@ NYC_data = pd.read_csv(influenza_file_path, index_col=[0])
 dropped_columns = [#'Year', 'Season',
                     'Week Ending Date', 'County_Served_hospital', 'Service_hospital']
 dropped_data = NYC_data.dropna().drop(columns=dropped_columns)
+#Dropping influenza unspecified 
 dropped_data = dropped_data[dropped_data.Disease != "INFLUENZA_UNSPECIFIED"]
 
 X = dropped_data.drop(columns='Disease')
@@ -43,8 +46,7 @@ preprocessor = ColumnTransformer(
 #Get column names from a ColumnTransformer, with print functions commented out to return only a list
 def get_column_names_from_ColumnTransformer(column_transformer):    
     col_name = []
-
-    for transformer_in_columns in column_transformer.transformers_[:-1]: #the last transformer is ColumnTransformer's 'remainder'
+    for transformer_in_columns in column_transformer.transformers_[:-2]: #the last transformer is ColumnTransformer's 'remainder'
         #print('\n\ntransformer: ', transformer_in_columns[0])
         
         raw_col_name = list(transformer_in_columns[2])
@@ -77,19 +79,27 @@ def get_column_names_from_ColumnTransformer(column_transformer):
             
     return col_name
 
-NYC_model = RandomForestClassifier(verbose=1)
+XGBparams = {'objective':'binary:logistic', 'n_estimators':200, 'n_jobs':6, 'verbosity':1, 'max_depth':6, 'min_child_weight':1} 
+NYC_model = XGBClassifier(XGBparams)
 NYC_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', NYC_model)])
+#NYC_pipeline.fit(trainX, trainy)
+#feature names of pipeline: NYC_pipeline.feature_names_in_
 
-#trainX, testX = trainX.drop(columns='Disease'), testX.drop(columns='Disease')
-NYC_pipeline.fit(trainX, trainy)
-NYC_pipeline.feature_names_in_
+# Cross_val with Scikit learn 
+#scores = cross_val_score(NYC_pipeline, trainX, trainy)
+#print("Average score: ", scores.mean())
+#predictions = NYC_pipeline.predict(testX)
+#print("Accuracy: ", accuracy_score(testy, predictions))
 
-predictions = NYC_pipeline.predict(testX)
-print("Accuracy: ", accuracy_score(testy, predictions))
+#Crossvall with XGBoost
+cvparams = {"objective":"binary:logistic",'colsample_bytree': 0.3,'learning_rate': 0.1,
+                'max_depth': 5, 'alpha': 10}
 
+xgb_cv = cv(dtrain=data_dmatrix, params=params, nfold=3,
+                    num_boost_round=50, early_stopping_rounds=10, metrics="auc", as_pandas=True, seed=123)
 
-new_column_names = (get_column_names_from_ColumnTransformer(preprocessor))
-
+#new_column_names = (get_column_names_from_ColumnTransformer(preprocessor))
+#print(new_column_names)
 
 
 
