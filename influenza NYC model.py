@@ -1,7 +1,8 @@
 import pandas as pd
+import numpy as np
 from sklearn.tree import DecisionTreeClassifier 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_absolute_error
 import category_encoders as ce
 from sklearn.compose import ColumnTransformer
@@ -11,9 +12,10 @@ from sklearn.preprocessing import OneHotEncoder
 from feature_importance import FeatureImportance
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score
-from xgboost import XGBClassifier
-from xgboost import cv
-influenza_file_path = 'Influenza_NY.csv'
+from xgboost.sklearn import XGBClassifier
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+
+influenza_file_path = 'Influenza Model/Influenza_NY.csv'
 NYC_data = pd.read_csv(influenza_file_path, index_col=[0])
 
 #Dropping columns with missing values, columns with uninterpretable meanings and columns not useful for predicting future influenza outbreaks (time-related)
@@ -25,6 +27,9 @@ dropped_data = dropped_data[dropped_data.Disease != "INFLUENZA_UNSPECIFIED"]
 
 X = dropped_data.drop(columns='Disease')
 y = dropped_data.Disease
+
+y.replace(to_replace="INFLUENZA_A", value=0, inplace=True) 
+y.replace(to_replace="INFLUENZA_B", value=1, inplace=True)
 
 trainX, testX, trainy, testy = train_test_split(X, y, test_size=0.8)
 
@@ -79,24 +84,46 @@ def get_column_names_from_ColumnTransformer(column_transformer):
             
     return col_name
 
-XGBparams = {'objective':'binary:logistic', 'n_estimators':200, 'n_jobs':6, 'verbosity':1, 'max_depth':6, 'min_child_weight':1} 
-NYC_model = XGBClassifier(XGBparams)
-NYC_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', NYC_model)])
-#NYC_pipeline.fit(trainX, trainy)
+def objective_function(params):
+    clf = XGBClassifier(**params)
+    score = cross_val_score(clf, trainX, trainy, cv=5).mean()
+    return {'loss': -score, 'status': STATUS_OK} 
+    
+hyperspace={'max_depth': hp.quniform("max_depth", 3, 18, 1),
+        'gamma': hp.uniform ('gamma', 1,9),
+        'reg_alpha' : hp.quniform('reg_alpha', 40,180,1),
+        'reg_lambda' : hp.uniform('reg_lambda', 0,1),
+        'colsample_bytree' : hp.uniform('colsample_bytree', 0.5,1),
+        'min_child_weight' : hp.quniform('min_child_weight', 0, 10, 1),
+        'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+        'num_leaves': hp.quniform('num_leaves', 5, 50, 1),
+        'n_estimators': hp.quniform('n_estimators', 50, 500, 1),
+        'seed': 0
+    }
+
+tpe_algorithm = tpe.suggest
+trials = Trials()
+
+XGBparams = {'n_estimators':100, 'objective':'binary:logistic', 'n_jobs':6, 'verbosity':1, 'max_depth':5, 'use_label_encoder':False} 
+xgb_model = XGBClassifier(**XGBparams)
+
+num_eval = 500
+best_param = fmin(objective_function, hyperspace, algo=tpe.suggest, max_evals=num_eval, trials=trials, rstate= np.random.default_rng(1))
+print(best_param)
+#GridSearchCV: best params = max depth: 5, n_estimators: 100
+#test_params={'n_estimators':[100,200,500], 'max_depth':[*range(4, 11, 1)]}
+#gsmodel = GridSearchCV(estimator=xgb_model, param_grid=test_params)
+NYC_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', xgb_model)])
+
+NYC_pipeline.fit(trainX, trainy)
+#print(NYC_pipeline.named_steps['model'].best_params_)
 #feature names of pipeline: NYC_pipeline.feature_names_in_
 
-# Cross_val with Scikit learn 
-#scores = cross_val_score(NYC_pipeline, trainX, trainy)
-#print("Average score: ", scores.mean())
-#predictions = NYC_pipeline.predict(testX)
-#print("Accuracy: ", accuracy_score(testy, predictions))
+predictions = NYC_pipeline.predict(testX)
+accuracy = accuracy_score(testy, predictions)
+print(accuracy)
 
 #Crossvall with XGBoost
-cvparams = {"objective":"binary:logistic",'colsample_bytree': 0.3,'learning_rate': 0.1,
-                'max_depth': 5, 'alpha': 10}
-
-xgb_cv = cv(dtrain=data_dmatrix, params=params, nfold=3,
-                    num_boost_round=50, early_stopping_rounds=10, metrics="auc", as_pandas=True, seed=123)
 
 #new_column_names = (get_column_names_from_ColumnTransformer(preprocessor))
 #print(new_column_names)
