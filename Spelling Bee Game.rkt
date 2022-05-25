@@ -3,7 +3,14 @@
 #reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname |Spelling Bee Game|) (read-case-sensitive #t) (teachpacks ((lib "image.rkt" "teachpack" "2htdp"))) (htdp-settings #(#t constructor repeating-decimal #f #t none #f ((lib "image.rkt" "teachpack" "2htdp")) #f)))
 ;; This project emulates the 7-letter spelling bee game of the NYT, as seen here:
 ;; https://www.nytimes.com/puzzles/spelling-bee
-
+;; features present in this version:
+;; - Middle/first letter must always be used
+;; - Keeps a list of words entered 
+;; - At least 4 letters
+;; - No word allowed more than 1 time
+;; - Scoring per letter
+;; - Backspace works
+;; - Matches entered word to a dictionary of 8000 words
 (require 2htdp/universe)
 (require 2htdp/image)
 (require 2htdp/batch-io)
